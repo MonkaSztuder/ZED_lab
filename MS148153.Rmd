@@ -1,0 +1,129 @@
+---
+title: "Raport dotyczący zachorowań na gruźlicę"
+author: "Monika Sztuder"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+# Wykorzystane biblioteki
+- EDAWR
+- dplyr
+- DT
+- ggplot2
+- tidyr
+
+```{r setup, include=FALSE}
+if (!requireNamespace("devtools", quietly = TRUE)) {
+  install.packages("devtools")
+}
+
+devtools::install_github("rstudio/EDAWR")
+
+library(EDAWR)
+library(dplyr)
+library(DT)
+library(tidyr)
+library(ggplot2)
+
+knitr::opts_chunk$set(echo=F, warning=F, message=F)
+
+```
+
+```{r echo=FALSE}
+prettyTable <- function(table_df, round_digits=2) {
+    DT::datatable(table_df, style="bootstrap", filter = "top", rownames = FALSE, extensions = "Buttons", options = list(dom = 'Bfrtip', buttons = c('copy', 'csv', 'excel', 'pdf', 'print'))) %>% formatRound(names(dplyr::select_if(table_df, is.numeric)), round_digits)
+}
+```
+
+```{r loaddata,cache=TRUE}
+tbdf<- tb
+
+```
+# Zbiór Danych
+Zbiór danych składa się z 3800 rekordów i zawiera informacje o liczbie zachorowań na gruźlicę w poszczególnych krajach w kolejnych latach.
+
+Zbiór danych zawiera następujące atrybuty:
+
+- `country`: Kraj, w którym zarejestrowano przypadki gruźlicy
+- `year`: Rok, w którym zarejestrowano przypadki gruźlicy
+- `sex`: Płeć osób, u których zarejestrowano przypadki gruźlicy
+- `child`: Liczba przypadków gruźlicy wśród dzieci
+- `adult`: Liczba przypadków gruźlicy wśród dorosłych
+- `elderly`: Liczba przypadków gruźlicy wśród osób starszych
+
+# Liczba zachorowań z podziałem na płeć
+```{r byGender}
+tbdf %>%
+  group_by(sex) %>% 
+  mutate(cases=child+adult+elderly) %>%
+  summarise(cases=sum(cases, na.rm=T)) %>%
+  knitr::kable()
+```
+
+# Sumaryczna liczba zachorowań wśród dzieci, dorosłych i osób starszych w kolejnych latach
+```{r plotAge}
+tbdf_byAge<- tbdf %>%
+  group_by(year) %>%
+  summarize(casesChild=sum(child, na.rm=T),casesAdult=sum(adult, na.rm=T),casesElderly=sum(elderly, na.rm=T)) %>%
+  pivot_longer(cols = c(casesChild, casesAdult, casesElderly),
+               names_to = "age_group",
+               values_to = "total_cases")
+
+#tbdf_byAge
+
+ggplot(tbdf_byAge, aes(x = year, y = total_cases, color = age_group)) +
+  geom_line(linewidth = 1) +
+  labs(title = "Liczba zachorowań",
+       x = "Rok",
+       y = "Liczba przypadków",
+       color = "Grupa wiekowa") +
+      theme_minimal() +
+  scale_color_manual(values = c("casesChild" = "blue", "casesAdult" = "red", "casesElderly" = "green"))
+```
+
+# Sumaryczna liczba zachorowań wśród dzieci, dorosłych i osób starszych w kolejnych latach osobno dla każdego kraju
+
+## Dane przedstawione w tabeli
+```{r tableCountry}
+summary_table <- tbdf %>%
+  group_by(country,year) %>%
+  summarize(casesChild = sum(child, na.rm = T),
+            casesAdult = sum(adult, na.rm = T),
+            casesElderly = sum(elderly, na.rm = T),
+            .groups = 'drop') %>%
+    mutate(year = as.character(year)) %>%
+  select(country,year,casesChild,casesAdult,casesElderly)
+
+prettyTable(summary_table,round_digits = 0)
+
+```
+
+## Dane przedstawione na wykresach
+```{r plotCountry}
+
+unique_countries <- unique(tbdf$country)
+
+for (country in unique_countries) {
+  tbdf_byCountry <- tbdf %>%
+    group_by(country,year) %>%
+    filter(country == !!country) %>%
+    summarize(casesChild = sum(child, na.rm = TRUE),
+              casesAdult = sum(adult, na.rm = TRUE),
+              casesElderly = sum(elderly, na.rm = TRUE)) %>%
+    pivot_longer(cols = c(casesChild, casesAdult, casesElderly),
+                 names_to = "age_group",
+                 values_to = "total_cases")
+  
+  plot <- ggplot(tbdf_byCountry, aes(x = year, y = total_cases, color = age_group)) +
+    geom_line(linewidth = 1) +
+    labs(title = paste("Liczba zachorowań w", country),
+         x = "Rok",
+         y = "Liczba przypadków",
+         color = "Grupa wiekowa") +
+    theme_minimal() +
+    scale_color_manual(values = c("casesChild" = "blue", "casesAdult" = "red", "casesElderly" = "green"))
+  
+  print(plot)
+}
